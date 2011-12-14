@@ -1,11 +1,9 @@
 class System
   def self.gather_stats
     system_data = {load: {}}
-    if(File.exists?('/proc/loadavg'))
+    if(OSArch.linux?)
       load_average = File.read('/proc/loadavg').gsub(',',' ').split
-    else
-      # for now, assume that if /proc/loadavg doesn't exist, we're on a mac
-      # TODO: turn this into a real check or skip mac completely
+    elsif(OSArch.osx?)
       load_average = `w | head -n1 | cut -d":" -f4`.split
     end
     system_data[:load][:one_minute] = load_average[0]
