@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+$:.unshift File.dirname(__FILE__)
+require 'lib/network'
+require 'lib/system'
+require 'lib/send_stats'
+require 'bundler'
+Bundler.require
+require 'optparse'
+
+options = {:delay => 5, :server_name => nil, :statsd_port => 8125}
+optparse = OptionParser.new do |opts|
+  opts.banner = "Usage: #{__FILE__} [options]\nSend Basic Stats to Graphite (via Statsd)"
+  opts.on('-s', '--server SERVER', 'The statsd server to send stats to') do |server|
+    options[:statsd_server] = server
+  end
+
+  opts.on('-d', '--delay SECONDS', 'Delay in seconds between stats gathering') do |seconds|
+    options[:delay] = seconds
+  end
+
+  opts.on('-n', '--server_name NAME', "The name of the server you're running this on") do |server_name|
+    options[:server_name] = server_name
+  end
+
+  opts.on('-p', '--port PORT', "The port statsd is running on") do |port|
+    options[:statsd_port] = port.to_i
+  end
+
+  opts.on('-h', '--help', 'Print help and exit') do
+    puts opts
+    exit 0
+  end
+end
+optparse.parse!
+
+if(options[:server_name].nil?)
+  server_name = `hostname`
+  puts "You didn't specify the name of this server.\nUsing #{server_name}"
+  options[:server_name] = server_name.chomp("\n").gsub('.', '_')
+  # sleep 2
+end
+
+def trap_signals(sigs = ['INT', 'HUP', 'TERM'])
+  sigs.each do |sig|
+    trap(sig) do
+      yield
+    end
+  end
+end
+
+trap_signals do
+  puts "\nexiting"
+  exit 0
+end
+
+stats_sender = SendStats.new(options[:statsd_server], options[:statsd_port])
+while(true)
+  network_stats = Network.gather_stats
+  stats_sender.send_count("sys.#{options[:server_name]}", network_stats)
+
+  system_stats = System.gather_stats
+  stats_sender.send_count("sys.#{options[:server_name]}", system_stats)
+
+  sleep options[:delay]
+end
